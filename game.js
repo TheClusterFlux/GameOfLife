@@ -145,13 +145,14 @@ class GameOfLife {
     }
     
     setupRealtimeControls() {
-        // Update frequency controls
+        // Update frequency controls (logarithmic)
         const updateFreqSlider = document.getElementById('realtimeUpdateFreq');
         const updateFreqInput = document.getElementById('realtimeUpdateFreqInput');
         
         updateFreqSlider.addEventListener('input', (e) => {
-            const value = parseFloat(e.target.value);
-            updateFreqInput.value = value;
+            const logValue = parseFloat(e.target.value);
+            const value = Math.pow(10, logValue); // Convert from log scale
+            updateFreqInput.value = value.toFixed(3);
             this.updateFrequency = value * 1000; // Convert to milliseconds
             this.restartGameLoop();
             this.updateCurrentSettingsDisplay();
@@ -159,26 +160,29 @@ class GameOfLife {
         
         updateFreqInput.addEventListener('input', (e) => {
             const value = parseFloat(e.target.value);
-            updateFreqSlider.value = value;
+            const logValue = Math.log10(value); // Convert to log scale
+            updateFreqSlider.value = logValue;
             this.updateFrequency = value * 1000; // Convert to milliseconds
             this.restartGameLoop();
             this.updateCurrentSettingsDisplay();
         });
         
-        // Mutation chance controls
+        // Mutation chance controls (logarithmic)
         const mutationChanceSlider = document.getElementById('realtimeMutationChance');
         const mutationChanceInput = document.getElementById('realtimeMutationChanceInput');
         
         mutationChanceSlider.addEventListener('input', (e) => {
-            const value = parseFloat(e.target.value);
-            mutationChanceInput.value = value;
+            const logValue = parseFloat(e.target.value);
+            const value = Math.pow(10, logValue - 4); // Convert from log scale (0.0001% to 10%)
+            mutationChanceInput.value = value.toFixed(4);
             this.mutationChance = value;
             this.updateCurrentSettingsDisplay();
         });
         
         mutationChanceInput.addEventListener('input', (e) => {
             const value = parseFloat(e.target.value);
-            mutationChanceSlider.value = value;
+            const logValue = Math.log10(value) + 4; // Convert to log scale
+            mutationChanceSlider.value = logValue;
             this.mutationChance = value;
             this.updateCurrentSettingsDisplay();
         });
@@ -207,10 +211,18 @@ class GameOfLife {
     }
     
     updateRealtimeControlsFromSettings() {
-        document.getElementById('realtimeUpdateFreq').value = this.updateFrequency / 1000;
-        document.getElementById('realtimeUpdateFreqInput').value = this.updateFrequency / 1000;
-        document.getElementById('realtimeMutationChance').value = this.mutationChance;
-        document.getElementById('realtimeMutationChanceInput').value = this.mutationChance;
+        // Update frequency (logarithmic)
+        const freqValue = this.updateFrequency / 1000;
+        const freqLogValue = Math.log10(freqValue);
+        document.getElementById('realtimeUpdateFreq').value = freqLogValue;
+        document.getElementById('realtimeUpdateFreqInput').value = freqValue.toFixed(3);
+        
+        // Mutation chance (logarithmic)
+        const mutValue = this.mutationChance;
+        const mutLogValue = Math.log10(mutValue) + 4; // Convert to log scale
+        document.getElementById('realtimeMutationChance').value = mutLogValue;
+        document.getElementById('realtimeMutationChanceInput').value = mutValue.toFixed(4);
+        
         document.getElementById('realtimeMutationType').value = this.mutationType;
         document.getElementById('realtimeEdgeLooping').checked = this.edgeLooping;
     }
