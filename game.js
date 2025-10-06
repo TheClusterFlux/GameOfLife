@@ -25,50 +25,76 @@ class GameOfLife {
     }
     
     initializeTrystero() {
-        // Initialize Trystero with server-based configuration
-        const config = {
-            appId: 'game-of-life-app',
-            // Use the same server as the tracker
-            trackerUrls: [`wss://${window.location.host}`]
-        };
-        
+        // Initialize WebSocket-based multiplayer
         try {
-            if (typeof Trystero === 'undefined') {
-                console.warn('Trystero not loaded, continuing without multiplayer functionality');
-                return;
-            }
+            // Use ws:// for localhost, wss:// for production
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}`;
+            this.ws = new WebSocket(wsUrl);
             
-            this.room = Trystero.joinRoom(config, this.roomId);
+            this.ws.onopen = () => {
+                console.log('WebSocket connected for multiplayer');
+                // Join the game room
+                this.ws.send(JSON.stringify({
+                    type: 'join',
+                    roomId: this.roomId
+                }));
+            };
             
-            // Listen for peer connections
-            this.room.onPeerJoin(peerId => {
-                console.log('Peer joined:', peerId);
-                this.peers.set(peerId, true);
+            this.ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    this.handleWebSocketMessage(data);
+                } catch (error) {
+                    console.error('Error parsing WebSocket message:', error);
+                }
+            };
+            
+            this.ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                this.peers.clear();
                 this.updateConnectedUsers();
-                
-                // Send current state to new peer
-                this.sendGameState();
-            });
+            };
             
-            this.room.onPeerLeave(peerId => {
-                console.log('Peer left:', peerId);
-                this.peers.delete(peerId);
-                this.updateConnectedUsers();
-            });
-            
-            // Listen for game state updates
-            this.room.makeAction('gameState', (state) => {
-                this.receiveGameState(state);
-            });
-            
-            // Listen for settings updates
-            this.room.makeAction('settings', (settings) => {
-                this.receiveSettings(settings);
-            });
+            this.ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
             
         } catch (error) {
-            console.error('Failed to initialize Trystero:', error);
+            console.error('Failed to initialize WebSocket multiplayer:', error);
             // Continue without multiplayer functionality
+        }
+    }
+    
+    handleWebSocketMessage(data) {
+        switch (data.type) {
+            case 'peer_joined':
+                this.peers.set(data.peerId, true);
+                this.updateConnectedUsers();
+                // Send current state to new peer
+                this.sendGameState();
+                break;
+                
+            case 'peers_list':
+                // Add existing peers to our list
+                data.peers.forEach(peerId => {
+                    this.peers.set(peerId, true);
+                });
+                this.updateConnectedUsers();
+                break;
+                
+            case 'peer_left':
+                this.peers.delete(data.peerId);
+                this.updateConnectedUsers();
+                break;
+                
+            case 'game_state':
+                this.receiveGameState(data.state);
+                break;
+                
+            case 'settings':
+                this.receiveSettings(data.settings);
+                break;
         }
     }
     
@@ -407,24 +433,16 @@ class GameOfLife {
     }
     
     nextGeneration() {
-        console.log('nextGeneration: Creating grid with dimensions', this.width, 'x', this.height);
-        
         // Apply mutations to the current grid first
         for (let y = 0; y < this.height; y++) {
             for (let x = 0; x < this.width; x++) {
                 // Apply mutation
                 if (Math.random() < this.mutationChance / 100) {
-                    console.log('Mutation triggered! Type:', this.mutationType, 'at position:', x, y);
-                    console.log('Mutation type check (=== "single"):', this.mutationType === 'single');
-                    console.log('Mutation type check (=== "stable"):', this.mutationType === 'stable');
-                    
                     if (this.mutationType === 'single') {
                         // Single cell mutation - just toggle this cell
                         this.grid[y][x] = !this.grid[y][x];
-                        console.log('Single cell mutation applied');
                     } else {
                         // Stable state mutation - create a stable pattern around this cell
-                        console.log('Creating stable mutation at:', x, y);
                         this.createStableMutation(this.grid, x, y);
                     }
                 }
@@ -489,16 +507,12 @@ class GameOfLife {
     }
     
     createStableMutation(grid, centerX, centerY) {
-        console.log('createStableMutation called at:', centerX, centerY);
-        console.log('Grid dimensions:', this.width, 'x', this.height);
-        console.log('Grid array length:', grid.length);
         // Choose a random stable pattern to create
         const patterns = [
             'block', 'blinker', 'toad', 'beacon', 'glider', 
             'figure8', 'clock', 'lwss'
         ];
         const pattern = patterns[Math.floor(Math.random() * patterns.length)];
-        console.log('Selected pattern:', pattern);
         
         try {
             switch (pattern) {
@@ -509,20 +523,12 @@ class GameOfLife {
                     const blockPos3 = this.wrapPosition(centerX, centerY + 1);
                     const blockPos4 = this.wrapPosition(centerX + 1, centerY + 1);
                     
-                    console.log('Block positions:', blockPos1, blockPos2, blockPos3, blockPos4);
-                    
                     // Safety check
                     if (grid[blockPos1.y] && grid[blockPos2.y] && grid[blockPos3.y] && grid[blockPos4.y]) {
                         grid[blockPos1.y][blockPos1.x] = true;
                         grid[blockPos2.y][blockPos2.x] = true;
                         grid[blockPos3.y][blockPos3.x] = true;
                         grid[blockPos4.y][blockPos4.x] = true;
-                        console.log('Block pattern placed at:', centerX, centerY);
-                    } else {
-                        console.log('Block pattern - grid row undefined, skipping');
-                        console.log('Grid has', grid.length, 'rows, trying to access rows:', blockPos1.y, blockPos2.y, blockPos3.y, blockPos4.y);
-                        console.log('Grid dimensions should be', this.width, 'x', this.height);
-                        console.log('Valid y range: 0 to', grid.length - 1);
                     }
                     break;
                     
@@ -532,16 +538,11 @@ class GameOfLife {
                     const blinkPos2 = this.wrapPosition(centerX + 1, centerY);
                     const blinkPos3 = this.wrapPosition(centerX + 2, centerY);
                     
-                    console.log('Blinker positions:', blinkPos1, blinkPos2, blinkPos3);
-                    
                     // Safety check
                     if (grid[blinkPos1.y] && grid[blinkPos2.y] && grid[blinkPos3.y]) {
                         grid[blinkPos1.y][blinkPos1.x] = true;
                         grid[blinkPos2.y][blinkPos2.x] = true;
                         grid[blinkPos3.y][blinkPos3.x] = true;
-                        console.log('Blinker pattern placed at:', centerX, centerY);
-                    } else {
-                        console.log('Blinker pattern - grid row undefined, skipping');
                     }
                     break;
                     
@@ -560,7 +561,6 @@ class GameOfLife {
                         toadPositions.forEach(pos => {
                             grid[pos.y][pos.x] = true;
                         });
-                        console.log('Toad pattern placed at:', centerX, centerY);
                     }
                     break;
                     
@@ -581,7 +581,6 @@ class GameOfLife {
                         beaconPositions.forEach(pos => {
                             grid[pos.y][pos.x] = true;
                         });
-                        console.log('Beacon pattern placed at:', centerX, centerY);
                     }
                     break;
                     
@@ -599,7 +598,6 @@ class GameOfLife {
                         gliderPositions.forEach(pos => {
                             grid[pos.y][pos.x] = true;
                         });
-                        console.log('Glider pattern placed at:', centerX, centerY);
                     }
                     break;
                     
@@ -622,7 +620,6 @@ class GameOfLife {
                         lwssPositions.forEach(pos => {
                             grid[pos.y][pos.x] = true;
                         });
-                        console.log('LWSS pattern placed at:', centerX, centerY);
                     }
                     break;
                     
@@ -643,7 +640,6 @@ class GameOfLife {
                         figure8Positions.forEach(pos => {
                             grid[pos.y][pos.x] = true;
                         });
-                        console.log('Figure-8 pattern placed at:', centerX, centerY);
                     }
                     break;
                     
@@ -662,7 +658,6 @@ class GameOfLife {
                         clockPositions.forEach(pos => {
                             grid[pos.y][pos.x] = true;
                         });
-                        console.log('Clock pattern placed at:', centerX, centerY);
                     }
                     break;
             }
@@ -693,7 +688,6 @@ class GameOfLife {
             while (wrappedY < 0) wrappedY += this.height;
             while (wrappedY >= this.height) wrappedY -= this.height;
             
-            console.log(`wrapPosition(${x}, ${y}) -> (${wrappedX}, ${wrappedY}) [grid size: ${this.width}x${this.height}]`);
             return { x: wrappedX, y: wrappedY };
         } else {
             return { x, y };
@@ -795,18 +789,21 @@ class GameOfLife {
     }
     
     broadcastGameState() {
-        if (this.room) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             const state = {
                 grid: this.grid,
                 generation: this.generation,
                 timestamp: Date.now()
             };
-            this.room.getAction('gameState')(state);
+            this.ws.send(JSON.stringify({
+                type: 'game_state',
+                state: state
+            }));
         }
     }
     
     broadcastSettings() {
-        if (this.room) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             const settings = {
                 width: this.width,
                 height: this.height,
@@ -816,7 +813,10 @@ class GameOfLife {
                 edgeLooping: this.edgeLooping,
                 timestamp: Date.now()
             };
-            this.room.getAction('settings')(settings);
+            this.ws.send(JSON.stringify({
+                type: 'settings',
+                settings: settings
+            }));
         }
     }
     

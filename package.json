@@ -12,7 +12,12 @@
     "trystero": "^0.8.0",
     "ws": "^8.14.2"
   },
-  "keywords": ["game-of-life", "trystero", "multiplayer", "real-time"],
+  "keywords": [
+    "game-of-life",
+    "trystero",
+    "multiplayer",
+    "real-time"
+  ],
   "author": "",
   "license": "MIT"
 }

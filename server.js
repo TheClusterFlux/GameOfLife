@@ -27,15 +27,21 @@ const wss = new WebSocket.Server({ server });
 const rooms = new Map();
 
 wss.on('connection', (ws, req) => {
-    console.log('WebSocket connection established');
-    
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
-            console.log('Received message:', data);
             
             // Handle different message types
             switch (data.type) {
+                case 'join':
+                    handleJoin(ws, data);
+                    break;
+                case 'game_state':
+                    handleGameState(ws, data);
+                    break;
+                case 'settings':
+                    handleSettings(ws, data);
+                    break;
                 case 'announce':
                     handleAnnounce(ws, data);
                     break;
@@ -43,7 +49,7 @@ wss.on('connection', (ws, req) => {
                     handleScrape(ws, data);
                     break;
                 default:
-                    console.log('Unknown message type:', data.type);
+                    // Unknown message type, ignore
             }
         } catch (error) {
             console.error('Error parsing WebSocket message:', error);
@@ -51,7 +57,6 @@ wss.on('connection', (ws, req) => {
     });
     
     ws.on('close', () => {
-        console.log('WebSocket connection closed');
         // Clean up any room entries for this connection
         for (const [roomId, peers] of rooms.entries()) {
             const index = peers.findIndex(peer => peer.ws === ws);
@@ -60,7 +65,6 @@ wss.on('connection', (ws, req) => {
                 if (peers.length === 0) {
                     rooms.delete(roomId);
                 }
-                console.log(`Removed peer from room ${roomId}`);
             }
         }
     });
@@ -108,7 +112,6 @@ function handleAnnounce(ws, data) {
     };
     
     ws.send(JSON.stringify(response));
-    console.log(`Announced peer ${peer_id} in room ${info_hash}, ${peers.length} other peers`);
 }
 
 function handleScrape(ws, data) {
@@ -127,7 +130,75 @@ function handleScrape(ws, data) {
     };
     
     ws.send(JSON.stringify(response));
-    console.log(`Scraped room ${info_hash}, ${room.length} peers`);
+}
+
+function handleJoin(ws, data) {
+    const { roomId } = data;
+    const peerId = Math.random().toString(36).substr(2, 9);
+    
+    if (!rooms.has(roomId)) {
+        rooms.set(roomId, []);
+    }
+    
+    const room = rooms.get(roomId);
+    room.push({
+        ws: ws,
+        peerId: peerId,
+        joined: Date.now()
+    });
+    
+    // Notify other peers about new peer
+    room.forEach(peer => {
+        if (peer.ws !== ws && peer.ws.readyState === WebSocket.OPEN) {
+            peer.ws.send(JSON.stringify({
+                type: 'peer_joined',
+                peerId: peerId
+            }));
+        }
+    });
+    
+    // Send list of existing peers to new peer
+    const existingPeers = room.filter(peer => peer.ws !== ws).map(peer => peer.peerId);
+    ws.send(JSON.stringify({
+        type: 'peers_list',
+        peers: existingPeers
+    }));
+}
+
+function handleGameState(ws, data) {
+    // Broadcast game state to all other peers in the same room
+    for (const [roomId, peers] of rooms.entries()) {
+        const peer = peers.find(p => p.ws === ws);
+        if (peer) {
+            peers.forEach(p => {
+                if (p.ws !== ws && p.ws.readyState === WebSocket.OPEN) {
+                    p.ws.send(JSON.stringify({
+                        type: 'game_state',
+                        state: data.state
+                    }));
+                }
+            });
+            break;
+        }
+    }
+}
+
+function handleSettings(ws, data) {
+    // Broadcast settings to all other peers in the same room
+    for (const [roomId, peers] of rooms.entries()) {
+        const peer = peers.find(p => p.ws === ws);
+        if (peer) {
+            peers.forEach(p => {
+                if (p.ws !== ws && p.ws.readyState === WebSocket.OPEN) {
+                    p.ws.send(JSON.stringify({
+                        type: 'settings',
+                        settings: data.settings
+                    }));
+                }
+            });
+            break;
+        }
+    }
 }
 
 server.listen(PORT, '0.0.0.0', () => {
