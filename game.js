@@ -30,6 +30,7 @@ class GameOfLife {
             // Use ws:// for localhost, wss:// for production
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}`;
+            console.log('Attempting WebSocket connection to:', wsUrl);
             this.ws = new WebSocket(wsUrl);
             
             this.ws.onopen = () => {
