@@ -31,6 +31,20 @@ spec:
       port: 80
       targetPort: 3000
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: game-of-life-ws
+spec:
+  type: ClusterIP
+  selector:
+    app: game-of-life
+  ports:
+    - port: 443
+      targetPort: 3000
+      protocol: TCP
+      name: websocket
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -38,11 +52,27 @@ metadata:
   namespace: default
   annotations:
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    # WebSocket support annotations
+    # WebSocket support annotations for nginx.org ingress controller
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "3600"
-    nginx.ingress.kubernetes.io/websocket-services: "game-of-life"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/server-snippets: |
+      map $http_upgrade $connection_upgrade {
+        default upgrade;
+        '' close;
+      }
+      location / {
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_http_version 1.1;
+      }
 spec:
   ingressClassName: nginx
   tls:
@@ -60,3 +90,49 @@ spec:
             name: game-of-life
             port:
               number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: game-of-life-ws
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # WebSocket support annotations for nginx.org ingress controller
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "3600"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/server-snippets: |
+      map $http_upgrade $connection_upgrade {
+        default upgrade;
+        '' close;
+      }
+      location / {
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_http_version 1.1;
+      }
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - ws.game-of-life.theclusterflux.com
+    secretName: theclusterflux
+  rules:
+  - host: ws.game-of-life.theclusterflux.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: game-of-life-ws
+            port:
+              number: 443

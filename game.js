@@ -29,8 +29,24 @@ class GameOfLife {
         try {
             // Use ws:// for localhost, wss:// for production
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}`;
+            let wsHost;
+            if (window.location.hostname === 'localhost') {
+                wsHost = window.location.host;
+            } else {
+                // Use WebSocket subdomain for production
+                wsHost = `ws.${window.location.hostname}`;
+            }
+            const wsUrl = `${protocol}//${wsHost}`;
             console.log('Attempting WebSocket connection to:', wsUrl);
+            
+            // Add a timeout for WebSocket connection
+            const wsTimeout = setTimeout(() => {
+                if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
+                    console.warn('WebSocket connection timeout, closing connection');
+                    this.ws.close();
+                }
+            }, 10000); // 10 second timeout
+            
             this.ws = new WebSocket(wsUrl);
             
             this.ws.onopen = () => {
