@@ -28,15 +28,13 @@ class GameOfLife {
         // Initialize WebSocket-based multiplayer
         try {
             // Use ws:// for localhost, wss:// for production
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            let wsHost;
+            let wsUrl;
             if (window.location.hostname === 'localhost') {
-                wsHost = window.location.host;
+                wsUrl = 'ws://localhost:3000';
             } else {
-                // Use WebSocket subdomain for production
-                wsHost = `ws.${window.location.hostname}`;
+                // Use direct WebSocket service on port 30080
+                wsUrl = 'ws://5.75.173.11:30080';
             }
-            const wsUrl = `${protocol}//${wsHost}`;
             console.log('Attempting WebSocket connection to:', wsUrl);
             
             // Add a timeout for WebSocket connection
