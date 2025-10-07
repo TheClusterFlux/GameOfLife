@@ -32,8 +32,8 @@ class GameOfLife {
             if (window.location.hostname === 'localhost') {
                 wsUrl = 'ws://localhost:3000';
             } else {
-                // Use the main domain with WebSocket upgrade through the ingress
-                wsUrl = 'wss://game-of-life.theclusterflux.com';
+                // Use the WebSocket path through the ingress
+                wsUrl = 'wss://game-of-life.theclusterflux.com/ws';
             }
             console.log('Attempting WebSocket connection to:', wsUrl);
             

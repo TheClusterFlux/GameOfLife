@@ -29,6 +29,9 @@ spec:
         - name: game-of-life
           image: docker.io/keanuwatts/theclusterflux:GameOfLife
           imagePullPolicy: Always
+          env:
+            - name: WEBSOCKET_URL
+              value: "wss://game-of-life.theclusterflux.com"
       imagePullSecrets:
         - name: dockerhub-secret
 ---
@@ -57,7 +60,8 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "3600"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
-    nginx.ingress.kubernetes.io/proxy-set-headers: "game-of-life-headers"
+    # WebSocket support for nginx.org controller
+    nginx.ingress.kubernetes.io/websocket-services: "game-of-life"
 spec:
   ingressClassName: nginx
   tls:
@@ -69,6 +73,51 @@ spec:
     http:
       paths:
       - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: game-of-life
+            port:
+              number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: game-of-life-ws
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "3600"
+    # WebSocket specific configuration
+    nginx.ingress.kubernetes.io/server-snippets: |
+      map $http_upgrade $connection_upgrade {
+        default upgrade;
+        '' close;
+      }
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_cache_bypass $http_upgrade;
+      proxy_http_version 1.1;
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - game-of-life.theclusterflux.com
+    secretName: theclusterflux
+  rules:
+  - host: game-of-life.theclusterflux.com
+    http:
+      paths:
+      - path: /ws
         pathType: Prefix
         backend:
           service:
